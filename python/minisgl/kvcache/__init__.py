@@ -12,8 +12,16 @@ from .base import (
     BaseCacheHandle,
     BaseCacheManager,
     BaseKVCache,
+    BaseKVPress,
     KVCacheLayout,
     SizeInfo,
+)
+from .press import (
+    L2NormPress,
+    RandomPress,
+    SnapKVPress,
+    StreamingLLMPress,
+    create_kv_press,
 )
 
 
@@ -65,10 +73,17 @@ def create_cache_manager(device: torch.device, type: str) -> BaseCacheManager:
 __all__ = [
     "create_kvcache",
     "create_cache_manager",
+    "create_kv_press",
     "BaseKVCache",
+    "BaseKVPress",
     "KVCacheLayout",
     "BaseCacheHandle",
     "BaseCacheManager",
     "SizeInfo",
     "SUPPORTED_CACHE_MANAGER",
+    # Press implementations
+    "RandomPress",
+    "StreamingLLMPress",
+    "L2NormPress",
+    "SnapKVPress",
 ]

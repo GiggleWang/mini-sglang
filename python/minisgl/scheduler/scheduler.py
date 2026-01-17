@@ -222,8 +222,29 @@ class Scheduler(SchedulerIOMixin):
             self.stream.synchronize()
         forward_output = self.engine.forward_batch(batch, sample_args)
         self._write_token_ids(forward_input, forward_output)
+        # Apply KV cache compression after prefill
+        if batch.is_prefill:
+            self._compress_prefill_batch(batch)
         self.decode_manager.filter_reqs(forward_input.batch.reqs)
         return forward_output
+
+    def _compress_prefill_batch(self, batch: Batch) -> None:
+        """Apply KV cache compression to requests in a prefill batch."""
+        for req in batch.reqs:
+            if isinstance(req, ChunkedReq):
+                continue  # Skip chunked requests, compress only after full prefill
+            if req.sampling_params is None or req.sampling_params.kv_press_method is None:
+                continue
+            seq_len_before = req.device_len
+            kept, evicted = self.cache_manager.compress_kv(
+                req=req,
+                kv_cache=self.engine.kv_cache,
+                page_table=self.page_table,
+                batch=batch,
+            )
+            logger.info_rank0(
+                f"KV compression req {req.uid}: seq_len={seq_len_before} -> kept={kept}, evicted={evicted}"
+            )
 
     def run_when_idle(self) -> None:
         """Called when the scheduler is idle to perform background tasks."""

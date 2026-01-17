@@ -54,6 +54,9 @@ class GenerateRequest(BaseModel):
     prompt: str
     max_tokens: int
     ignore_eos: bool = False
+    # KV cache compression settings
+    kv_press_method: str | None = None  # e.g., "streaming_llm", "l2_norm", "random"
+    kv_press_ratio: float = 0.5  # compression ratio (0.0-1.0)
 
 
 class Message(BaseModel):
@@ -81,6 +84,10 @@ class OpenAICompletionRequest(BaseModel):
     frequency_penalty: float = 0.0
 
     ignore_eos: bool = False
+
+    # KV cache compression settings (mini-sglang extension)
+    kv_press_method: str | None = None  # e.g., "streaming_llm", "l2_norm", "random"
+    kv_press_ratio: float = 0.5  # compression ratio (0.0-1.0)
 
 
 class ModelCard(BaseModel):
@@ -223,6 +230,8 @@ async def generate(req: GenerateRequest):
             sampling_params=SamplingParams(
                 ignore_eos=req.ignore_eos,
                 max_tokens=req.max_tokens,
+                kv_press_method=req.kv_press_method,
+                kv_press_ratio=req.kv_press_ratio,
             ),
         )
     )
@@ -263,6 +272,8 @@ async def v1_completions(req: OpenAICompletionRequest):
                 temperature=req.temperature,
                 top_k=req.top_k,
                 top_p=req.top_p,
+                kv_press_method=req.kv_press_method,
+                kv_press_ratio=req.kv_press_ratio,
             ),
         )
     )
@@ -300,6 +311,8 @@ async def shell_completion(req: OpenAICompletionRequest):
                 temperature=req.temperature,
                 top_k=req.top_k,
                 top_p=req.top_p,
+                kv_press_method=req.kv_press_method,
+                kv_press_ratio=req.kv_press_ratio,
             ),
         )
     )

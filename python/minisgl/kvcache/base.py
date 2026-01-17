@@ -3,9 +3,96 @@ from __future__ import annotations
 import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import NamedTuple, Tuple
+from typing import TYPE_CHECKING, NamedTuple, Tuple
 
 import torch
+
+if TYPE_CHECKING:
+    from minisgl.core import Batch
+
+
+class BaseKVPress(ABC):
+    """
+    Base class for KV cache compression (similar to kvpress).
+    Implementations should define how to score and select KV pairs to keep.
+    """
+
+    def __init__(self, compression_ratio: float = 0.5):
+        """
+        Args:
+            compression_ratio: Ratio of KV pairs to keep after compression (0.0-1.0).
+                             e.g., 0.5 means keeping 50% of the KV pairs.
+        """
+        assert 0.0 < compression_ratio <= 1.0, "compression_ratio must be in (0, 1]"
+        self.compression_ratio = compression_ratio
+
+    @abstractmethod
+    def score(
+        self,
+        kv_cache: "BaseKVCache",
+        page_indices: torch.Tensor,
+        batch: "Batch",
+    ) -> torch.Tensor:
+        """
+        Compute importance scores for each position in the KV cache.
+
+        Args:
+            kv_cache: The KV cache containing K and V tensors.
+            page_indices: Indices of pages in the KV cache for this request. Shape: (seq_len,)
+            batch: The current batch being processed.
+
+        Returns:
+            scores: Importance scores for each position. Shape: (seq_len,)
+                   Higher scores indicate more important positions.
+        """
+        ...
+
+    def select(
+        self,
+        scores: torch.Tensor,
+        seq_len: int,
+        num_sink_tokens: int = 4,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Select which positions to keep based on importance scores.
+
+        Args:
+            scores: Importance scores for each position. Shape: (seq_len,)
+            seq_len: Total sequence length.
+            num_sink_tokens: Number of initial tokens to always keep (attention sinks).
+
+        Returns:
+            keep_indices: Indices of positions to keep. Shape: (keep_len,)
+            evict_indices: Indices of positions to evict. Shape: (evict_len,)
+        """
+        target_len = max(num_sink_tokens, int(seq_len * self.compression_ratio))
+
+        if target_len >= seq_len:
+            # No compression needed
+            return torch.arange(seq_len, device=scores.device), torch.tensor(
+                [], dtype=torch.long, device=scores.device
+            )
+
+        # Always keep sink tokens (first few tokens are important for attention)
+        sink_mask = torch.zeros(seq_len, dtype=torch.bool, device=scores.device)
+        sink_mask[:num_sink_tokens] = True
+
+        # Select top-k from remaining positions based on scores
+        remaining_scores = scores.clone()
+        remaining_scores[:num_sink_tokens] = float("-inf")  # Exclude sinks from selection
+
+        num_to_keep = target_len - num_sink_tokens
+        if num_to_keep > 0:
+            _, top_indices = remaining_scores.topk(num_to_keep)
+            keep_mask = sink_mask.clone()
+            keep_mask[top_indices] = True
+        else:
+            keep_mask = sink_mask
+
+        keep_indices = torch.where(keep_mask)[0]
+        evict_indices = torch.where(~keep_mask)[0]
+
+        return keep_indices, evict_indices
 
 
 class BaseKVCache(ABC):

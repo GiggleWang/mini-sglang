@@ -18,6 +18,9 @@ class SamplingParams:
     top_p: float = 1.0
     ignore_eos: bool = False
     max_tokens: int = 1024
+    # KV cache compression settings (serializable params)
+    kv_press_method: str | None = None  # "streaming_llm", "l2_norm", "random", "snapkv"
+    kv_press_ratio: float = 0.5  # compression ratio (0.0-1.0)
 
     @property
     def is_greedy(self) -> bool:
