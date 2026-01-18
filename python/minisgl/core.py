@@ -19,7 +19,11 @@ class SamplingParams:
     ignore_eos: bool = False
     max_tokens: int = 1024
     # KV cache compression settings (serializable params)
-    kv_press_method: str | None = None  # "streaming_llm", "l2_norm", "random", "snapkv"
+    # Supported methods: "random", "streaming_llm", "l2_norm", "snapkv", "knorm",
+    #   "expected_attention", "tova", "observed_attention", "noncausal_attn",
+    #   "qfilter", "cur", "pyramid_kv", "lag_kv", "key_diff",
+    #   "leverage_score", "compactor"
+    kv_press_method: str | None = None
     kv_press_ratio: float = 0.5  # compression ratio (0.0-1.0)
 
     @property

@@ -17,10 +17,29 @@ from .base import (
     SizeInfo,
 )
 from .press import (
+    # Basic methods
     L2NormPress,
     RandomPress,
     SnapKVPress,
     StreamingLLMPress,
+    # Norm-based methods
+    KnormPress,
+    # Attention-based methods
+    ExpectedAttentionPress,
+    TOVAPress,
+    ObservedAttentionPress,
+    NonCausalAttnPress,
+    # SVD/Projection-based methods
+    QFilterPress,
+    CURPress,
+    # Structural methods
+    PyramidKVPress,
+    LagKVPress,
+    KeyDiffPress,
+    # Leverage score methods
+    LeverageScorePress,
+    CompactorPress,
+    # Factory function
     create_kv_press,
 )
 
@@ -81,9 +100,26 @@ __all__ = [
     "BaseCacheManager",
     "SizeInfo",
     "SUPPORTED_CACHE_MANAGER",
-    # Press implementations
+    # Press implementations - Basic
     "RandomPress",
     "StreamingLLMPress",
     "L2NormPress",
     "SnapKVPress",
+    # Press implementations - Norm-based
+    "KnormPress",
+    # Press implementations - Attention-based
+    "ExpectedAttentionPress",
+    "TOVAPress",
+    "ObservedAttentionPress",
+    "NonCausalAttnPress",
+    # Press implementations - SVD/Projection-based
+    "QFilterPress",
+    "CURPress",
+    # Press implementations - Structural
+    "PyramidKVPress",
+    "LagKVPress",
+    "KeyDiffPress",
+    # Press implementations - Leverage score
+    "LeverageScorePress",
+    "CompactorPress",
 ]
