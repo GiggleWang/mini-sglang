@@ -223,6 +223,46 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
         help="Run the server in shell mode.",
     )
 
+    from minisgl.kvcache.compression import _VALID_METHODS
+
+    parser.add_argument(
+        "--kv-compression-method",
+        dest="kv_compression_method",
+        default=ServerArgs.kv_compression_method,
+        choices=sorted(_VALID_METHODS),
+        help="KV cache compression method applied after prefill, before decode. "
+        "Choices: none (disabled), streaming_llm, knorm, keydiff, lagkv, "
+        "expected_attention, think.",
+    )
+    parser.add_argument(
+        "--kv-compression-keep-ratio",
+        dest="kv_compression_keep_ratio",
+        type=float,
+        default=ServerArgs.kv_compression_keep_ratio,
+        help="Fraction of prefill tokens to retain after compression (default: 0.5).",
+    )
+    parser.add_argument(
+        "--kv-compression-n-sink",
+        dest="kv_compression_n_sink",
+        type=int,
+        default=ServerArgs.kv_compression_n_sink,
+        help="Number of attention-sink tokens always kept (streaming_llm, lagkv).",
+    )
+    parser.add_argument(
+        "--kv-compression-n-local",
+        dest="kv_compression_n_local",
+        type=int,
+        default=ServerArgs.kv_compression_n_local,
+        help="Size of the local recency window always kept (streaming_llm).",
+    )
+    parser.add_argument(
+        "--kv-compression-lag-size",
+        dest="kv_compression_lag_size",
+        type=int,
+        default=ServerArgs.kv_compression_lag_size,
+        help="Partition size for the lagkv scoring method.",
+    )
+
     # Parse arguments
     kwargs = parser.parse_args(args).__dict__.copy()
 

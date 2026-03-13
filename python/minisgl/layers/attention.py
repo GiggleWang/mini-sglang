@@ -53,5 +53,8 @@ class AttentionLayer(StateLessOP):
             self.k_norm.forward_inplace(k.view(-1, self.num_kv_heads, self.head_dim))
         q, k = self.rotary.forward(ctx.batch.positions, q, k)
         q = q.view(-1, self.num_qo_heads, self.head_dim)
+        # Capture Q from the last attention layer during prefill (used by ThinkPress compression)
+        if ctx.batch.is_prefill and self.layer_id == ctx.kv_cache.num_layers - 1:
+            ctx.prefill_q = q.detach()
         o = ctx.attn_backend.forward(q, k, v, self.layer_id, ctx.batch)
         return o.view(-1, self.qo_attn_dim)

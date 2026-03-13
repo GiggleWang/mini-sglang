@@ -106,6 +106,8 @@ class Context:
     moe_backend: BaseMoeBackend = field(init=False)
     kv_cache: BaseKVCachePool = field(init=False)
     _batch: Batch | None = field(default=None, init=False)
+    # Q vectors from the last attention layer during prefill (for ThinkPress compression)
+    prefill_q: torch.Tensor | None = field(default=None, init=False)
 
     @property
     def batch(self) -> Batch:

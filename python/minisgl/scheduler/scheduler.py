@@ -15,6 +15,9 @@ from minisgl.message import (
 )
 from minisgl.utils import init_logger, load_tokenizer
 
+from minisgl.kvcache.compact import KVCompressionManager
+from minisgl.kvcache.compression import create_compressor
+
 from .cache import CacheManager
 from .config import SchedulerConfig
 from .decode import DecodeManager
@@ -64,9 +67,32 @@ class Scheduler(SchedulerIOMixin):
             self.cache_manager, self.table_manager, self.decode_manager
         )
 
+        # KV cache compression (applied after prefill, before decode)
+        self.kv_compression_manager: KVCompressionManager | None = None
+        if config.kv_compression_method != "none":
+            if config.cache_type != "naive":
+                logger.warning(
+                    "KV cache compression is only tested with --cache-type naive; "
+                    f"current cache_type={config.cache_type!r}. Proceeding anyway."
+                )
+            compressor = create_compressor(
+                config.kv_compression_method,
+                n_sink=config.kv_compression_n_sink,
+                n_local=config.kv_compression_n_local,
+                lag_size=config.kv_compression_lag_size,
+            )
+            self.kv_compression_manager = KVCompressionManager(
+                compressor, config.kv_compression_keep_ratio
+            )
+            logger.info(
+                f"KV cache compression enabled: method={config.kv_compression_method!r}, "
+                f"keep_ratio={config.kv_compression_keep_ratio}"
+            )
+
         # some alias for easy access
         self.finished_reqs: Set[Req] = set()
         self.tokenizer = load_tokenizer(config.model_path)
+        self._step_count: int = 0
         self.eos_token_id = self.tokenizer.eos_token_id
         self.token_pool = self.table_manager.token_pool
         self.prefill_budget = config.max_extend_tokens
@@ -103,6 +129,17 @@ class Scheduler(SchedulerIOMixin):
                 ongoing_data = (forward_input, self._forward(forward_input))
 
         self._process_last_data(last_data)
+        self._step_count += 1
+        if self._step_count % 20 == 0:
+            n_running = len(self.decode_manager.running_reqs)
+            n_waiting = len(self.prefill_manager.pending_list)
+            n_free = len(self.cache_manager.free_slots)
+            n_total = self.cache_manager.num_pages
+            kv_usage = (n_total - n_free) / n_total * 100
+            logger.info_rank0(
+                f"[step {self._step_count}] running={n_running}, waiting={n_waiting}, "
+                f"kv_cache={kv_usage:.1f}% ({n_total - n_free}/{n_total} pages)"
+            )
         return ongoing_data
 
     def normal_loop(self) -> None:
@@ -161,7 +198,21 @@ class Scheduler(SchedulerIOMixin):
                     self._free_req_resources(req)
                     new_finished_reqs.add(req)
                 elif batch.is_prefill:  # for prefill, non-chunk req, cache the prefix
+                    if self.kv_compression_manager is not None:
+                        from minisgl.core import get_global_ctx
+                        self.kv_compression_manager.compress_req(
+                            req,
+                            self.cache_manager,
+                            self.engine.kv_cache,
+                            self.engine.page_table,
+                            prefill_q=get_global_ctx().prefill_q,
+                        )
                     self.cache_manager.cache_req(req, finished=False)
+
+        # Release prefill Q to free GPU memory
+        if batch.is_prefill and self.kv_compression_manager is not None:
+            from minisgl.core import get_global_ctx
+            get_global_ctx().prefill_q = None
 
         self.finished_reqs = new_finished_reqs
         self.send_result(reply)
