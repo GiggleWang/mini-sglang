@@ -69,6 +69,12 @@ class EnvClassSingleton:
     DISABLE_OVERLAP_SCHEDULING = EnvBool(False)
     PYNCCL_MAX_BUFFER_SIZE = EnvMem(1024**3)
 
+    # decode timing
+    DECODE_TIMING = EnvBool(False)
+    DECODE_TIMING_INTERVAL = EnvInt(100)
+    DECODE_TIMING_CSV = EnvVar("decode_timing.csv", fn=str)
+    DECODE_METADATA_CSV = EnvVar("decode_metadata.csv", fn=str)
+
     def __new__(cls):
         # single instance
         if cls._instance is None:

@@ -5,7 +5,7 @@ from typing import List
 import torch
 import torch.nn.functional as F
 from minisgl.distributed import DistributedCommunicator, get_tp_info
-from minisgl.utils import div_even
+from minisgl.utils import cuda_time, div_even
 
 from .base import BaseOP
 
@@ -67,6 +67,10 @@ class LinearColParallelMerged(_LinearTPImpl):
         tp_output_size = sum(tp_output_sizes)
         super().__init__(input_size, output_size, input_size, tp_output_size, has_bias)
 
+    @cuda_time("gate_up_proj")
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return super().forward(x)
+
 
 class LinearQKVMerged(_LinearTPImpl):
     def __init__(
@@ -87,6 +91,10 @@ class LinearQKVMerged(_LinearTPImpl):
         local_osize = (local_num_qo + 2 * local_num_kv) * head_dim
         super().__init__(full_isize, full_osize, local_isize, local_osize, has_bias)
 
+    @cuda_time("qkv_proj")
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return super().forward(x)
+
 
 class LinearOProj(_LinearTPImpl):
     def __init__(self, input_size: int, output_size: int, has_bias: bool):
@@ -99,6 +107,7 @@ class LinearOProj(_LinearTPImpl):
         self._tp_size = tp_info.size
         super().__init__(full_isize, full_osize, local_isize, local_osize, has_bias)
 
+    @cuda_time("o_proj")
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = F.linear(x, self.weight, self.bias)
         if self._tp_size > 1:
@@ -120,6 +129,7 @@ class LinearRowParallel(_LinearTPImpl):
         self._tp_size = tp_info.size
         super().__init__(input_size, output_size, local_input_size, local_output_size, has_bias)
 
+    @cuda_time("down_proj")
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = F.linear(x, self.weight, self.bias)
         if self._tp_size > 1:

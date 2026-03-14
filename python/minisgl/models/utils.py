@@ -16,7 +16,7 @@ from minisgl.layers import (
     silu_and_mul,
 )
 from minisgl.models import ModelConfig
-from minisgl.utils import nvtx_annotate
+from minisgl.utils import cuda_time, nvtx_annotate
 
 if TYPE_CHECKING:
     import torch
@@ -41,6 +41,7 @@ class GatedMLP(BaseOP):
             has_bias=False,
         )
 
+    @cuda_time("mlp")
     @nvtx_annotate("MLP")
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gate_up = self.gate_up_proj.forward(x)
@@ -115,6 +116,7 @@ class RopeAttn(BaseOP):
             has_bias=False,
         )
 
+    @cuda_time("attn")
     @nvtx_annotate("MHA")
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         qkv = self.qkv_proj.forward(x)

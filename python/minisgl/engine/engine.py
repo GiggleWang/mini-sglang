@@ -109,6 +109,20 @@ class Engine:
             dummy_req=self.dummy_req,
         )
 
+        # ======================= Decode timing initialization ========================
+        from minisgl.env import ENV
+
+        if ENV.DECODE_TIMING:
+            from minisgl.engine.decode_timer import DecodeTimer, set_decode_timer
+
+            set_decode_timer(
+                DecodeTimer(
+                    timing_csv=str(ENV.DECODE_TIMING_CSV),
+                    metadata_csv=str(ENV.DECODE_METADATA_CSV),
+                    interval=int(str(ENV.DECODE_TIMING_INTERVAL)),
+                )
+            )
+
     def _init_communication(self, config: EngineConfig) -> torch.distributed.ProcessGroup:
         if config.tp_info.size == 1 or config.use_pynccl:
             torch.distributed.init_process_group(
@@ -190,11 +204,18 @@ class Engine:
 
     def forward_batch(self, batch: Batch, args: BatchSamplingArgs) -> ForwardOutput:
         assert torch.cuda.current_stream() == self.stream
+        from minisgl.engine.decode_timer import get_decode_timer
+
+        timer = get_decode_timer()
         with self.ctx.forward_batch(batch):
+            if timer is not None and not batch.is_prefill:
+                timer.record_batch_metadata(batch)
             if self.graph_runner.can_use_cuda_graph(batch):
                 logits = self.graph_runner.replay(batch)
             else:
                 logits = self.model.forward()
+            if timer is not None and not batch.is_prefill:
+                timer.on_iteration_end()
 
         for req in batch.reqs:
             req.complete_one()

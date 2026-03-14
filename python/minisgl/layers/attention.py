@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import torch
 from minisgl.core import get_global_ctx
 from minisgl.distributed import get_tp_info
-from minisgl.utils import div_even
+from minisgl.utils import cuda_time, div_even
 
 from .base import StateLessOP
 from .rotary import get_rope
@@ -44,6 +44,7 @@ class AttentionLayer(StateLessOP):
         self.q_norm = q_norm
         self.k_norm = k_norm
 
+    @cuda_time("attn_kernel")
     def forward(self, qkv: torch.Tensor) -> torch.Tensor:
         ctx = get_global_ctx()
         q, k, v = qkv.split([self.qo_attn_dim, self.kv_attn_dim, self.kv_attn_dim], dim=-1)
