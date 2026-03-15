@@ -75,6 +75,10 @@ class EnvClassSingleton:
     DECODE_TIMING_CSV = EnvVar("decode_timing.csv", fn=str)
     DECODE_METADATA_CSV = EnvVar("decode_metadata.csv", fn=str)
 
+    # iteration timeline (wall-clock timestamps per prefill/decode step)
+    ITER_TIMELINE = EnvBool(False)
+    ITER_TIMELINE_CSV = EnvVar("iter_timeline.csv", fn=str)
+
     def __new__(cls):
         # single instance
         if cls._instance is None:

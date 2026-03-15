@@ -123,6 +123,11 @@ class Engine:
                 )
             )
 
+        if ENV.ITER_TIMELINE:
+            from minisgl.engine.iter_timeline import IterTimeline, set_iter_timeline
+
+            set_iter_timeline(IterTimeline(str(ENV.ITER_TIMELINE_CSV)))
+
     def _init_communication(self, config: EngineConfig) -> torch.distributed.ProcessGroup:
         if config.tp_info.size == 1 or config.use_pynccl:
             torch.distributed.init_process_group(
@@ -203,9 +208,13 @@ class Engine:
         return min_free_memory, max_free_memory
 
     def forward_batch(self, batch: Batch, args: BatchSamplingArgs) -> ForwardOutput:
-        assert torch.cuda.current_stream() == self.stream
+        import time
         from minisgl.engine.decode_timer import get_decode_timer
+        from minisgl.engine.iter_timeline import get_iter_timeline
 
+        t_start = time.perf_counter()
+
+        assert torch.cuda.current_stream() == self.stream
         timer = get_decode_timer()
         with self.ctx.forward_batch(batch):
             if timer is not None and not batch.is_prefill:
@@ -224,6 +233,12 @@ class Engine:
         next_tokens_cpu = next_tokens_gpu.to("cpu", non_blocking=True)
         copy_done_event = torch.cuda.Event()
         copy_done_event.record(self.stream)
+
+        t_end = time.perf_counter()
+        tl = get_iter_timeline()
+        if tl is not None:
+            tl.record(batch, t_start, t_end)
+
         return ForwardOutput(next_tokens_gpu, next_tokens_cpu, copy_done_event)
 
     def shutdown(self) -> None:
