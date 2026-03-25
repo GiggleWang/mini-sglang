@@ -96,7 +96,8 @@ class Scheduler(SchedulerIOMixin):
         self.eos_token_id = self.tokenizer.eos_token_id
         self.token_pool = self.table_manager.token_pool
         self.prefill_budget = config.max_extend_tokens
-        # self.config = config
+        self._decode_min_steps = config.decode_min_steps
+        self._decode_steps_remaining: int = 0
 
         # Initialize the I/O mixin
         super().__init__(config, self.engine.tp_cpu_group)
@@ -268,12 +269,30 @@ class Scheduler(SchedulerIOMixin):
         )
 
     def _schedule_next_batch(self) -> ForwardInput | None:
-        # TODO: support other policies: e.g. DECODE first
+        min_steps = self._decode_min_steps
+
+        # Decode protection: force decode during the guaranteed window
+        if min_steps > 0 and self._decode_steps_remaining > 0:
+            batch = self.decode_manager.schedule_next_batch()
+            if batch:
+                self._decode_steps_remaining -= 1
+                return self._prepare_batch(batch)
+            # All decode reqs finished, protection ends naturally
+            self._decode_steps_remaining = 0
+
+        # Default policy: prefill first
         batch = (
             self.prefill_manager.schedule_next_batch(self.prefill_budget)
             or self.decode_manager.schedule_next_batch()
         )
-        return self._prepare_batch(batch) if batch else None
+        if batch is None:
+            return None
+
+        # When decode is selected, start a new protection window
+        if min_steps > 0 and batch.phase == "decode":
+            self._decode_steps_remaining = min_steps - 1
+
+        return self._prepare_batch(batch)
 
     def _forward(self, forward_input: ForwardInput) -> ForwardOutput:
         batch, sample_args, input_mapping, output_mapping = forward_input

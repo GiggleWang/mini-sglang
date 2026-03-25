@@ -218,6 +218,14 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
     )
 
     parser.add_argument(
+        "--decode-min-steps",
+        type=int,
+        default=ServerArgs.decode_min_steps,
+        help="Minimum consecutive decode steps before allowing prefill to preempt. "
+             "0 disables (default, prefill-first behavior).",
+    )
+
+    parser.add_argument(
         "--shell-mode",
         action="store_true",
         help="Run the server in shell mode.",
