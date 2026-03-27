@@ -218,6 +218,15 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
     )
 
     parser.add_argument(
+        "--scheduling-policy",
+        dest="scheduling_policy",
+        default=ServerArgs.scheduling_policy,
+        choices=["prefill_first", "decode_first"],
+        help="Scheduling policy. 'prefill_first' (default): new prefills preempt running decode. "
+             "'decode_first': running decode is prioritized over new prefills.",
+    )
+
+    parser.add_argument(
         "--decode-min-steps",
         type=int,
         default=ServerArgs.decode_min_steps,

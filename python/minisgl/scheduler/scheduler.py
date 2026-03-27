@@ -98,6 +98,7 @@ class Scheduler(SchedulerIOMixin):
         self.prefill_budget = config.max_extend_tokens
         self._decode_min_steps = config.decode_min_steps
         self._decode_steps_remaining: int = 0
+        self._scheduling_policy = config.scheduling_policy
 
         # Initialize the I/O mixin
         super().__init__(config, self.engine.tp_cpu_group)
@@ -280,11 +281,17 @@ class Scheduler(SchedulerIOMixin):
             # All decode reqs finished, protection ends naturally
             self._decode_steps_remaining = 0
 
-        # Default policy: prefill first
-        batch = (
-            self.prefill_manager.schedule_next_batch(self.prefill_budget)
-            or self.decode_manager.schedule_next_batch()
-        )
+        # Default policy
+        if self._scheduling_policy == "decode_first":
+            batch = (
+                self.decode_manager.schedule_next_batch()
+                or self.prefill_manager.schedule_next_batch(self.prefill_budget)
+            )
+        else:  # prefill_first
+            batch = (
+                self.prefill_manager.schedule_next_batch(self.prefill_budget)
+                or self.decode_manager.schedule_next_batch()
+            )
         if batch is None:
             return None
 

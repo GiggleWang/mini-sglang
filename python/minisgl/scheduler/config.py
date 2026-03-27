@@ -26,7 +26,8 @@ class SchedulerConfig(EngineConfig):
     kv_compression_lag_size: int = 128      # lagkv: partition size
 
     # scheduling policy
-    decode_min_steps: int = 0  # 0 = disabled (prefill-first), >0 = min consecutive decode steps
+    scheduling_policy: str = "prefill_first"  # "prefill_first" | "decode_first"
+    decode_min_steps: int = 0  # 0 = disabled, >0 = min consecutive decode steps (prefill_first only)
 
     # networking config
     _unique_suffix: str = field(default_factory=_get_pid_suffix)
