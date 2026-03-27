@@ -99,6 +99,8 @@ class Scheduler(SchedulerIOMixin):
         self._decode_min_steps = config.decode_min_steps
         self._decode_steps_remaining: int = 0
         self._scheduling_policy = config.scheduling_policy
+        self._compression_drain = config.compression_drain
+        self._drain_counter: int = 0  # compression-aware drain scheduling
 
         # Initialize the I/O mixin
         super().__init__(config, self.engine.tp_cpu_group)
@@ -216,6 +218,15 @@ class Scheduler(SchedulerIOMixin):
             from minisgl.core import get_global_ctx
             get_global_ctx().prefill_q = None
 
+            # Compression-aware drain: after compression frees memory,
+            # force decode for each waiting decode request before allowing more prefills.
+            n_decode = len(self.decode_manager.running_reqs)
+            if self._compression_drain and n_decode > 0:
+                self._drain_counter = n_decode
+                logger.debug_rank0(
+                    f"Compression drain triggered: drain_counter={n_decode}"
+                )
+
         self.finished_reqs = new_finished_reqs
         self.send_result(reply)
 
@@ -270,6 +281,15 @@ class Scheduler(SchedulerIOMixin):
         )
 
     def _schedule_next_batch(self) -> ForwardInput | None:
+        # Compression-aware drain: force decode after compression events
+        if self._drain_counter > 0:
+            batch = self.decode_manager.schedule_next_batch()
+            if batch:
+                self._drain_counter -= 1
+                return self._prepare_batch(batch)
+            # All decode reqs finished, drain ends naturally
+            self._drain_counter = 0
+
         min_steps = self._decode_min_steps
 
         # Decode protection: force decode during the guaranteed window

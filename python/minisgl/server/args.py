@@ -235,6 +235,14 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
     )
 
     parser.add_argument(
+        "--compression-drain",
+        action="store_true",
+        default=ServerArgs.compression_drain,
+        help="Force decode steps after KV cache compression to prevent decode starvation. "
+             "The number of forced decode steps equals the current decode queue size.",
+    )
+
+    parser.add_argument(
         "--shell-mode",
         action="store_true",
         help="Run the server in shell mode.",
