@@ -239,7 +239,16 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
         action="store_true",
         default=ServerArgs.compression_drain,
         help="Force decode steps after KV cache compression to prevent decode starvation. "
-             "The number of forced decode steps equals the current decode queue size.",
+             "Drain steps = freed_pages / total_pages * compression-drain-scale.",
+    )
+
+    parser.add_argument(
+        "--compression-drain-scale",
+        type=int,
+        dest="compression_drain_scale",
+        default=ServerArgs.compression_drain_scale,
+        help="Scale factor for compression drain: drain_steps = freed_ratio * scale. "
+             "Larger values force more decode steps after compression (default: 100).",
     )
 
     parser.add_argument(

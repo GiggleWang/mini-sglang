@@ -29,6 +29,7 @@ class SchedulerConfig(EngineConfig):
     scheduling_policy: str = "prefill_first"  # "prefill_first" | "decode_first"
     decode_min_steps: int = 0  # 0 = disabled, >0 = min consecutive decode steps (prefill_first only)
     compression_drain: bool = False  # force decode after compression to prevent decode starvation
+    compression_drain_scale: int = 100  # drain_steps = freed_pages/total_pages * scale
 
     # networking config
     _unique_suffix: str = field(default_factory=_get_pid_suffix)

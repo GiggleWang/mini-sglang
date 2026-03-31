@@ -100,6 +100,7 @@ class Scheduler(SchedulerIOMixin):
         self._decode_steps_remaining: int = 0
         self._scheduling_policy = config.scheduling_policy
         self._compression_drain = config.compression_drain
+        self._drain_scale = config.compression_drain_scale
         self._drain_counter: int = 0  # compression-aware drain scheduling
 
         # Initialize the I/O mixin
@@ -140,9 +141,15 @@ class Scheduler(SchedulerIOMixin):
             n_free = len(self.cache_manager.free_slots)
             n_total = self.cache_manager.num_pages
             kv_usage = (n_total - n_free) / n_total * 100
+            ps = self.cache_manager.page_size
+            n_running_pages = sum(
+                (req.device_len + ps - 1) // ps for req in self.decode_manager.running_reqs
+            )
+            running_usage = n_running_pages / n_total * 100
             logger.info_rank0(
                 f"[step {self._step_count}] running={n_running}, waiting={n_waiting}, "
-                f"kv_cache={kv_usage:.1f}% ({n_total - n_free}/{n_total} pages)"
+                f"kv_cache={kv_usage:.1f}% ({n_total - n_free}/{n_total} pages), "
+                f"running_kv={running_usage:.1f}% ({n_running_pages}/{n_total} pages)"
             )
         return ongoing_data
 
@@ -184,6 +191,7 @@ class Scheduler(SchedulerIOMixin):
         copy_done.synchronize()
         reply: List[DetokenizeMsg] = []
         new_finished_reqs: Set[Req] = set()
+        pages_before = len(self.cache_manager.free_slots) if batch.is_prefill else 0
         with self.cache_manager.lazy_free_region():
             for i, req in enumerate(batch.reqs):
                 if isinstance(req, ChunkedReq):
@@ -218,14 +226,20 @@ class Scheduler(SchedulerIOMixin):
             from minisgl.core import get_global_ctx
             get_global_ctx().prefill_q = None
 
-            # Compression-aware drain: after compression frees memory,
-            # force decode for each waiting decode request before allowing more prefills.
-            n_decode = len(self.decode_manager.running_reqs)
-            if self._compression_drain and n_decode > 0:
-                self._drain_counter = n_decode
-                logger.debug_rank0(
-                    f"Compression drain triggered: drain_counter={n_decode}"
-                )
+            # Compression-aware drain: drain_steps = freed_pages/total_pages * scale.
+            # Self-calibrating: large compression (long ctx) → more steps;
+            # small compression (short ctx) → near-zero steps.
+            if self._compression_drain:
+                pages_freed = len(self.cache_manager.free_slots) - pages_before
+                if pages_freed > 0:
+                    freed_ratio = pages_freed / self.cache_manager.num_pages
+                    drain_steps = int(freed_ratio * self._drain_scale)
+                    self._drain_counter += drain_steps
+                    logger.debug_rank0(
+                        f"Compression drain: freed={pages_freed} pages "
+                        f"({freed_ratio:.1%} of total), drain_steps+={drain_steps}, "
+                        f"counter={self._drain_counter}"
+                    )
 
         self.finished_reqs = new_finished_reqs
         self.send_result(reply)
